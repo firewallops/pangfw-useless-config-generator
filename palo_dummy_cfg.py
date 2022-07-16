@@ -277,7 +277,11 @@ def get_tags(fw):
     tag_objects = objects.Tag().refreshall(fw, add=False)
     return [tag.name for tag in tag_objects]
 
-def main(fw, tag_max, add_max, grp_max, svc_max, svc_grp_max, rule_max, prefix_tag, prefix_address, prefix_group, prefix_service, commit):
+def main(fw, tag_max, add_max, grp_max, svc_max, svc_grp_max, rule_max, prefix_tag, prefix_address, prefix_group, prefix_service, commit, revert):
+    if revert:
+        print("[+] Reverting to running configuration...")
+        fw.revert_to_running_configuration()
+        return
     tag_generator(fw, tag_max, prefix_tag)
     tags = get_tags(fw)
     address_generator(fw, add_max, prefix_address, tags)
@@ -305,10 +309,12 @@ parser.add_argument('--prefixaddress', default="PlaceholderAddress", help="Provi
 parser.add_argument('--prefixgroup', default="PlaceholderGroup", help="Provide a prefix for address groups names. DEFAULT is 'PlaceholderGroup'.")
 parser.add_argument('--prefixservice', default="ServiceGroup", help="Provide a prefix for Service groups names. DEFAULT is 'ServiceGroup'.")
 parser.add_argument('--commit', action='store_true', help="Select if you want to commit your changes to running configuration.")
+parser.add_argument('--revert', action='store_true', help="Select if you want to revert your configuration to running configuration.")
 args = parser.parse_args()
 
 PREFIX = "PlaceholderAddress"
 print('[+] PAN NGFW Placeholder Configuration Generator by FirewallOps.')
 fw = firewall.Firewall(args.host, args.user, args.password)
-main(fw, args.tag ,args.address, args.group, args.service, args.servicegroup, args.rule, args.prefixtag, args.prefixaddress, args.prefixgroup, args.prefixservice, args.commit)
+main(fw, args.tag ,args.address, args.group, args.service, args.servicegroup, args.rule, 
+args.prefixtag, args.prefixaddress, args.prefixgroup, args.prefixservice, args.commit, args.revert)
 print("== Creating configuration took: {} ==".format(datetime.datetime.now() - config_start))
