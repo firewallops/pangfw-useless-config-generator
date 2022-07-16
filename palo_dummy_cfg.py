@@ -6,10 +6,14 @@ import argparse
 
 config_start = datetime.datetime.now()
 
-def num_as_ip(num, offset=0):
+def num_as_ip(duplicates_flag):
+    if duplicates_flag:
+        return ".".join(str(random.choice([10,20,30,40,50,60,70,80,90,100])) for _ in range(4))
     return ".".join(str(random.randint(0, 255)) for _ in range(4))
 
 def tag_generator(fw, tag_max, prefix_tag):
+    if tag_max <= 0:
+        return
     start = datetime.datetime.now()
     original_tags = objects.Tag().refreshall(fw, add=False)
     tags = [tag.name for tag in original_tags]
@@ -44,7 +48,7 @@ def device_address_max(fw):
         address_max = int(address_max, 16)
     return address_max
 
-def address_generator(fw, add_max, prefix_address, tags):
+def address_generator(fw, add_max, prefix_address, tags, duplicates_flag):
     if add_max <= 0:
         return
     start = datetime.datetime.now()
@@ -62,12 +66,21 @@ def address_generator(fw, add_max, prefix_address, tags):
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_objects = []
-    for num in range(1, int(add_max)+1):
-        ao = objects.AddressObject(
-            "{0}{1:03}".format(prefix_address, num), num_as_ip(num), tag=[random.choice(tags)]
-        )
-        bulk_objects.append(ao)
-        fw.add(ao)
+    # If there are now Tags configured, do not add them to objects
+    if len(tags) >= 1:
+        for num in range(1, int(add_max)+1):
+            ao = objects.AddressObject(
+                "{0}{1:03}".format(prefix_address, num), num_as_ip(duplicates_flag), tag=[random.choice(tags)]
+            )
+            bulk_objects.append(ao)
+            fw.add(ao)
+    else:
+        for num in range(1, int(add_max)+1):
+            ao = objects.AddressObject(
+                "{0}{1:03}".format(prefix_address, num), num_as_ip(duplicates_flag)
+            )
+            bulk_objects.append(ao)
+            fw.add(ao)
     bulk_objects[0].create_similar()
     print(
         "= Creating {0} address object(s) took: {1}".format(
@@ -109,12 +122,21 @@ def group_generator(fw, grp_max, prefix_group, tags):
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_groups = []
-    for num in range(1, int(grp_max)+1):
-        ao = objects.AddressGroup(
-            "{0}{1:03}".format(prefix_group, num), random.sample(adresy4groups, k=random.randint(1, mgm)), tag=[random.choice(tags)]
-        )
-        bulk_groups.append(ao)
-        fw.add(ao)
+    # If there are now Tags configured, do not add them to objects
+    if len(tags) >= 1:
+        for num in range(1, int(grp_max)+1):
+            ao = objects.AddressGroup(
+                "{0}{1:03}".format(prefix_group, num), random.sample(adresy4groups, k=random.randint(1, mgm)), tag=[random.choice(tags)]
+            )
+            bulk_groups.append(ao)
+            fw.add(ao)
+    else:
+        for num in range(1, int(grp_max)+1):
+            ao = objects.AddressGroup(
+                "{0}{1:03}".format(prefix_group, num), random.sample(adresy4groups, k=random.randint(1, mgm))
+            )
+            bulk_groups.append(ao)
+            fw.add(ao)
     bulk_groups[0].create_similar()
     print(
         "= Creating {0} address group(s) took: {1}".format(
@@ -146,20 +168,36 @@ def service_generator(fw, svc_max, tags):
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_objects = []
-    for num in range(1, int(svc_max)+1):
-        protocol = random.choice(['tcp', 'udp'])
-        port = random.randint(1, 65536)
-        ao = objects.ServiceObject(
-            "{}_{}".format(protocol, port), 
-            "{}".format(protocol),
-            destination_port = "{}".format(port),
-            tag=[random.choice(tags)]
-            )
-        if (ao.name not in os_names) and (ao.name not in [bo.name for bo in bulk_objects]):
-            bulk_objects.append(ao)
-            fw.add(ao)
-        else:
-            print("{} already exists, skipping creation of the service.".format(ao.name))
+    # If there are now Tags configured, do not add them to objects
+    if len(tags) >= 1:
+        for num in range(1, int(svc_max)+1):
+            protocol = random.choice(['tcp', 'udp'])
+            port = random.randint(1, 65536)
+            ao = objects.ServiceObject(
+                "{}_{}".format(protocol, port), 
+                "{}".format(protocol),
+                destination_port = "{}".format(port),
+                tag=[random.choice(tags)]
+                )
+            if (ao.name not in os_names) and (ao.name not in [bo.name for bo in bulk_objects]):
+                bulk_objects.append(ao)
+                fw.add(ao)
+            else:
+                print("{} already exists, skipping creation of the service.".format(ao.name))
+    else:
+        for num in range(1, int(svc_max)+1):
+            protocol = random.choice(['tcp', 'udp'])
+            port = random.randint(1, 65536)
+            ao = objects.ServiceObject(
+                "{}_{}".format(protocol, port), 
+                "{}".format(protocol),
+                destination_port = "{}".format(port)
+                )
+            if (ao.name not in os_names) and (ao.name not in [bo.name for bo in bulk_objects]):
+                bulk_objects.append(ao)
+                fw.add(ao)
+            else:
+                print("{} already exists, skipping creation of the service.".format(ao.name))
     bulk_objects[0].create_similar()
     print(
         "= Creating {0} service object(s) took: {1}".format(
@@ -201,12 +239,21 @@ def service_group_generator(fw, grp_max, prefix_group, tags):
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_svc_groups = []
-    for num in range(1, int(grp_max)+1):
-        sg = objects.ServiceGroup(
-            "{0}{1:03}".format(prefix_group, num), random.sample(svc4group, k=random.randint(1, mgm)), tag=[random.choice(tags)]
-        )
-        bulk_svc_groups.append(sg)
-        fw.add(sg)
+    # If there are now Tags configured, do not add them to objects
+    if len(tags) >= 1:
+        for num in range(1, int(grp_max)+1):
+            sg = objects.ServiceGroup(
+                "{0}{1:03}".format(prefix_group, num), random.sample(svc4group, k=random.randint(1, mgm)), tag=[random.choice(tags)]
+            )
+            bulk_svc_groups.append(sg)
+            fw.add(sg)
+    else:
+        for num in range(1, int(grp_max)+1):
+            sg = objects.ServiceGroup(
+            "{0}{1:03}".format(prefix_group, num), random.sample(svc4group, k=random.randint(1, mgm))
+            )
+            bulk_svc_groups.append(sg)
+            fw.add(sg)
     bulk_svc_groups[0].create_similar()
     print(
         "= Creating {0} service group(s) took: {1}".format(
@@ -247,26 +294,43 @@ def rule_generator(fw, rule_max, tags):
         adresy.append(og.name)
     serwisy = [os.name for os in original_services]
     nowe_rulki = []
-    rule_tag = random.choice(tags)
-    for i in range(1, int(rule_max)+1):
-        rule_tag = random.choice(tags)
-        parametry = {
-            "name": "rule{}".format(i),
-            "description": "Placeholder rule number {}".format(i),
-            "fromzone": "any",
-            "tozone": "any",
-            "source": random.sample(adresy, k=random.randint(1, 5)),
-            "destination": random.sample(adresy, k=random.randint(1, 5)),
-            "service": random.sample(serwisy, k=random.randint(1, 5)),
-            "application": "any",
-            "action": "allow",
-            "log_end": True,
-            "tag": rule_tag.split(),
-            "group_tag": rule_tag
-        }
-        new_rule = policies.SecurityRule(**parametry)
-        rulebase.add(new_rule)
-        nowe_rulki.append(new_rule)
+    if len(tags) >= 1:
+        for i in range(1, int(rule_max)+1):
+            rule_tag = random.choice(tags)
+            parametry = {
+                "name": "rule{}".format(i),
+                "description": "Placeholder rule number {}".format(i),
+                "fromzone": "any",
+                "tozone": "any",
+                "source": random.sample(adresy, k=random.randint(1, 5)),
+                "destination": random.sample(adresy, k=random.randint(1, 5)),
+                "service": random.sample(serwisy, k=random.randint(1, 5)),
+                "application": "any",
+                "action": "allow",
+                "log_end": True,
+                "tag": rule_tag.split(),
+                "group_tag": rule_tag
+            }
+            new_rule = policies.SecurityRule(**parametry)
+            rulebase.add(new_rule)
+            nowe_rulki.append(new_rule)
+    else:
+        for i in range(1, int(rule_max)+1):
+            parametry = {
+                "name": "rule{}".format(i),
+                "description": "Placeholder rule number {}".format(i),
+                "fromzone": "any",
+                "tozone": "any",
+                "source": random.sample(adresy, k=random.randint(1, 5)),
+                "destination": random.sample(adresy, k=random.randint(1, 5)),
+                "service": random.sample(serwisy, k=random.randint(1, 5)),
+                "application": "any",
+                "action": "allow",
+                "log_end": True,
+            }
+            new_rule = policies.SecurityRule(**parametry)
+            rulebase.add(new_rule)
+            nowe_rulki.append(new_rule)
     nowe_rulki[0].create_similar()
     print(
         "= Creating {0} security rule(s) took: {1}".format(
@@ -277,14 +341,14 @@ def get_tags(fw):
     tag_objects = objects.Tag().refreshall(fw, add=False)
     return [tag.name for tag in tag_objects]
 
-def main(fw, tag_max, add_max, grp_max, svc_max, svc_grp_max, rule_max, prefix_tag, prefix_address, prefix_group, prefix_service, commit, revert):
+def main(fw, tag_max, add_max, grp_max, svc_max, svc_grp_max, rule_max, prefix_tag, prefix_address, prefix_group, prefix_service, commit, revert, duplicates_flag):
     if revert:
         print("[+] Reverting to running configuration...")
         fw.revert_to_running_configuration()
         return
     tag_generator(fw, tag_max, prefix_tag)
     tags = get_tags(fw)
-    address_generator(fw, add_max, prefix_address, tags)
+    address_generator(fw, add_max, prefix_address, tags, duplicates_flag)
     group_generator(fw, grp_max, prefix_group, tags)
     service_generator(fw, svc_max, tags)
     service_group_generator(fw, svc_grp_max, prefix_service, tags)
@@ -310,11 +374,12 @@ parser.add_argument('--prefixgroup', default="PlaceholderGroup", help="Provide a
 parser.add_argument('--prefixservice', default="ServiceGroup", help="Provide a prefix for Service groups names. DEFAULT is 'ServiceGroup'.")
 parser.add_argument('--commit', action='store_true', help="Select if you want to commit your changes to running configuration.")
 parser.add_argument('--revert', action='store_true', help="Select if you want to revert your configuration to running configuration.")
+parser.add_argument('--duplicates', action='store_true', help="Select if you want to create duplicate address objects.")
 args = parser.parse_args()
 
 PREFIX = "PlaceholderAddress"
 print('[+] PAN NGFW Placeholder Configuration Generator by FirewallOps.')
 fw = firewall.Firewall(args.host, args.user, args.password)
 main(fw, args.tag ,args.address, args.group, args.service, args.servicegroup, args.rule, 
-args.prefixtag, args.prefixaddress, args.prefixgroup, args.prefixservice, args.commit, args.revert)
+args.prefixtag, args.prefixaddress, args.prefixgroup, args.prefixservice, args.commit, args.revert, args.duplicates)
 print("== Creating configuration took: {} ==".format(datetime.datetime.now() - config_start))
