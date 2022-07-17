@@ -1,6 +1,8 @@
+from __future__ import barry_as_FLUFL
 import datetime
+from hashlib import new
 import sys
-from panos import policies, objects, firewall
+from panos import policies, objects, firewall, network
 import random
 import argparse
 
@@ -19,13 +21,13 @@ def tag_generator(fw, tag_max, prefix_tag):
     tags = [tag.name for tag in original_tags]
     DEVICE_TAG_MAX = 10000
     if len(tags) >= DEVICE_TAG_MAX:
-        print("Maximum number of tag objects reached.")
-        print("Reverting to running configuration.")
+        print("[!] Maximum number of tag objects reached [!]")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     elif (len(tags) + int(tag_max) > DEVICE_TAG_MAX):
         print("I can only create {} tag(s)".format(DEVICE_TAG_MAX - len(tags)))
-        print("Reverting to running configuration.")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_tags = []
@@ -56,13 +58,13 @@ def address_generator(fw, add_max, prefix_address, tags, duplicates_flag):
     oo_names = [oo.name for oo in original_objects]
     device_add_max = device_address_max(fw)
     if len(oo_names) >= int(device_add_max):
-        print("Maximum number of address objects reached")
-        print("Reverting to running configuration.")
+        print("[!] Maximum number of address objects reached [!]")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     elif (len(oo_names) + int(add_max) > int(device_add_max)):
         print("I can only create {} address(es)".format(int(device_add_max) - len(oo_names)))
-        print("Reverting to running configuration.")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_objects = []
@@ -112,8 +114,8 @@ def group_generator(fw, grp_max, prefix_group, tags):
     else:
         mgm = len(adresy4groups)
     if len(oo_names) >= int(device_grp_max):
-        print("Maximum number of address groups reached")
-        print("Reverting to running configuration.")
+        print("[!] Maximum number of address groups reached [!]")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     elif (len(oo_names) + int(grp_max) > int(device_grp_max)):
@@ -158,13 +160,13 @@ def service_generator(fw, svc_max, tags):
     original_services = objects.ServiceObject.refreshall(fw, add=False)
     os_names = [os.name for os in original_services]
     if len(os_names) >= int(device_svc_max):
-        print("Maximum number of service objects reached")
-        print("Reverting to running configuration.")
+        print("[!] Maximum number of service objects reached [!]")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     elif (len(os_names) + int(svc_max) > int(device_svc_max)):
         print("I can only create {} service(s)".format(int(device_svc_max) - len(os_names)))
-        print("Reverting to running configuration.")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_objects = []
@@ -229,8 +231,8 @@ def service_group_generator(fw, grp_max, prefix_group, tags):
     else:
         mgm = len(svc4group)
     if len(og_names) >= int(device_service_group_max):
-        print("Maximum number of service groups reached.")
-        print("Reverting to running configuration.")
+        print("[!] Maximum number of service groups reached [!]")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     elif (len(og_names) + int(grp_max) > int(device_service_group_max)):
@@ -267,23 +269,21 @@ def device_rule_max(fw):
         rule_max = int(rule_max, 16)
     return int(rule_max)
 
-def rule_generator(fw, rule_max, tags):
+def rule_generator(fw, rule_max, tags, rulebase):
     if rule_max <= 0:
         return
     start = datetime.datetime.now()
     device_sec_rule_max = device_rule_max(fw)
-    rulebase = policies.Rulebase()
-    fw.add(rulebase)
     security_policy = policies.SecurityRule.refreshall(rulebase, add=False)
     oo_names = [oo.name for oo in security_policy]
     if len(oo_names) >= int(device_sec_rule_max):
-        print("Maximum number of rules reached")
-        print("Reverting to running configuration.")
+        print("[!] Maximum number of security rules reached [!]")
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     elif (len(oo_names) + int(rule_max) > int(device_sec_rule_max)):
-        print("I can only create {} rule(s)".format(int(device_sec_rule_max) - len(oo_names)))
-        print("Reverting to running configuration.")
+        print("I can only create {} secuirty rule(s)".format(int(device_sec_rule_max) - len(oo_names)))
+        print("Reverting to running configuration...")
         fw.revert_to_running_configuration()
         sys.exit()
     original_objects = objects.AddressObject.refreshall(fw, add=False)
@@ -337,22 +337,110 @@ def rule_generator(fw, rule_max, tags):
             len(nowe_rulki), datetime.datetime.now() - start
         )
     )
+
 def get_tags(fw):
     tag_objects = objects.Tag().refreshall(fw, add=False)
     return [tag.name for tag in tag_objects]
 
-def main(fw, tag_max, add_max, grp_max, svc_max, svc_grp_max, rule_max, prefix_tag, prefix_address, prefix_group, prefix_service, commit, revert, duplicates_flag):
+def zone_generator(fw):
+    new_zone = network.Zone(**{'mode': 'layer3', 'name': 'Test_Zone_L3'})
+    fw.add(new_zone)
+    new_zone.create()
+
+def zone_picker(fw):
+    zones = network.Zone.refreshall(fw, add=False)
+    if len(zones) < 1:
+        zone_generator(fw)
+        return zone_picker(fw)
+    else:
+        for zone in zones:
+            if (zone.mode == 'layer3') or (zone.mode == 'virtual-wire'):
+                flag = True
+                return zone.name
+        if not flag:
+            zone_generator(fw)
+            return zone_picker(fw)
+
+def nat_rule_generator(fw, rule_max, tags, rulebase):
+    if rule_max <=0:
+        return
+    start = datetime.datetime.now()
+    device_nat_rule_max = fw.op('show system state filter "cfg.general.max-nat-policy-rule"')[0].text.lstrip('cfg.general.max-nat-policy-rule: ').rstrip('\n')
+    if 'x' in device_nat_rule_max:
+        device_nat_rule_max = int(device_nat_rule_max, 16)
+    nat_policy = policies.NatRule.refreshall(rulebase, add=False)
+    rule_names = [n.name for n in nat_policy]
+    if len(rule_names) >= int(device_nat_rule_max):
+        print("Maximum number of NAT rules reached")
+        print("Reverting to running configuration.")
+        fw.revert_to_running_configuration()
+        sys.exit()
+    elif (len(rule_names) + int(rule_max) > int(device_nat_rule_max)):
+        print("I can only create {} rule(s)".format(int(device_nat_rule_max) - len(rule_names)))
+        print("Reverting to running configuration.")
+        fw.revert_to_running_configuration()
+        sys.exit()
+    original_objects = objects.AddressObject.refreshall(fw, add=False)
+    original_groups = objects.AddressGroup.refreshall(fw, add=False)
+    original_services = objects.ServiceObject.refreshall(fw, add=False)
+    adresy = [oo.name for oo in original_objects]
+    for og in original_groups:
+        adresy.append(og.name)
+    serwisy = [os.name for os in original_services]
+    new_nat_policy = []
+    zone = [zone_picker(fw)]
+    if len(tags) >= 1:
+        for i in range(1, int(rule_max)+1):
+            rule_tag = random.choice(tags)
+            parameters = {'fromzone': ['any'],
+                'tozone': zone,
+                'service': random.choice(serwisy),
+                'source': [random.choice(adresy)],
+                'destination': [random.choice(adresy)],
+                'source_translation_type': 'static-ip',
+                'source_translation_static_translated_address': num_as_ip(False),
+                'tag': rule_tag.split(),
+                'group_tag': rule_tag,
+                'name': "natrule{}".format(i)}
+            new_nat_rule = policies.NatRule(**parameters)
+            rulebase.add(new_nat_rule)
+            new_nat_policy.append(new_nat_rule)
+    else:
+        for i in range(1, int(rule_max)+1):
+            parameters = {'fromzone': ['any'],
+                'tozone': [zone_picker(fw)],
+                'service': random.choice(serwisy),
+                'source': [random.choice(adresy)],
+                'destination': [random.choice(adresy)],
+                'source_translation_type': 'static-ip',
+                'source_translation_static_translated_address': num_as_ip(False),
+                'name': "natrule{}".format(i)}
+            new_nat_rule = policies.NatRule(**parameters)
+            rulebase.add(new_nat_rule)
+            new_nat_policy.append(new_nat_rule)
+    new_nat_policy[0].create_similar()
+    print(
+        "= Creating {0} nat rule(s) took: {1}".format(
+            len(new_nat_policy), datetime.datetime.now() - start
+        )
+    )
+
+def main(fw, tag_max, add_max, grp_max, svc_max, svc_grp_max, rule_max, nat_rule_max,
+ prefix_tag, prefix_address, prefix_group, prefix_service, commit, revert, duplicates_flag):
     if revert:
         print("[+] Reverting to running configuration...")
         fw.revert_to_running_configuration()
         return
+    rulebase = policies.Rulebase()
+    fw.add(rulebase)
     tag_generator(fw, tag_max, prefix_tag)
     tags = get_tags(fw)
     address_generator(fw, add_max, prefix_address, tags, duplicates_flag)
     group_generator(fw, grp_max, prefix_group, tags)
     service_generator(fw, svc_max, tags)
     service_group_generator(fw, svc_grp_max, prefix_service, tags)
-    rule_generator(fw, rule_max, tags)
+    rule_generator(fw, rule_max, tags, rulebase)
+    nat_rule_generator(fw, nat_rule_max, tags, rulebase)
     if commit:
         print("[+] Commit in progress...")
         fw.commit(sync=True)
@@ -368,6 +456,7 @@ parser.add_argument('--group', default=0, type=int, help="Provide a number of ad
 parser.add_argument('--service', default=0, type=int, help="Provide a number of service objects to create. DEFAULT is 0.")
 parser.add_argument('--servicegroup', default=0, type=int, help="Provide a number of service groups to create. DEFAULT is 0.")
 parser.add_argument('--rule', default=0, type=int, help="Provide a number of security rules to create. DEFAULT is 0.")
+parser.add_argument('--natrule', default=0, type=int, help="Provide a number of nat rules to create. DEFAULT is 0.")
 parser.add_argument('--prefixtag', default="Tag", help="Provide a prefix for address objects names. DEFAULT is 'Tag'.")
 parser.add_argument('--prefixaddress', default="PlaceholderAddress", help="Provide a prefix for address objects names. DEFAULT is 'PlaceholderAddress'.")
 parser.add_argument('--prefixgroup', default="PlaceholderGroup", help="Provide a prefix for address groups names. DEFAULT is 'PlaceholderGroup'.")
@@ -380,6 +469,6 @@ args = parser.parse_args()
 PREFIX = "PlaceholderAddress"
 print('[+] PAN NGFW Placeholder Configuration Generator by FirewallOps.')
 fw = firewall.Firewall(args.host, args.user, args.password)
-main(fw, args.tag ,args.address, args.group, args.service, args.servicegroup, args.rule, 
+main(fw, args.tag ,args.address, args.group, args.service, args.servicegroup, args.rule, args.natrule, 
 args.prefixtag, args.prefixaddress, args.prefixgroup, args.prefixservice, args.commit, args.revert, args.duplicates)
 print("== Creating configuration took: {} ==".format(datetime.datetime.now() - config_start))
