@@ -66,7 +66,7 @@ def address_generator(fw, add_max, prefix_address, tags, duplicates_flag):
         fw.revert_to_running_configuration()
         sys.exit()
     bulk_objects = []
-    # If there are now Tags configured, do not add them to objects
+    # If there are no Tags configured, do not add them to objects
     if len(tags) >= 1:
         for num in range(1, int(add_max)+1):
             ao = objects.AddressObject(
