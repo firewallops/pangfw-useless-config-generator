@@ -1,6 +1,4 @@
-from __future__ import barry_as_FLUFL
 import datetime
-from hashlib import new
 import sys
 from panos import policies, objects, firewall, network
 import random
